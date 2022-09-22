@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>meeting</title>
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"/>
+    <!--    引入vue -->
+    <script src="plugins/vue/vue-2.6.6.js"></script>
+
+    <!--    引入 element-ui -->
+    <link rel="stylesheet" href="plugins/element-ui/lib/theme-chalk/index.css">
+    <script src="plugins/element-ui/lib/index.js"></script>
+
+    <!--    适配   -->
+    <script src="js/utils/adapter.js"></script>
+    <script src="js/utils/medooze-media-server-client.js" type="text/javascript"></script>
+    <script src="js/utils/transaction-manager.js" type="text/javascript"></script>
+    <script src="js/utils/tools.js" type="text/javascript"></script>
+    <script src="js/utils/palette.js" type="text/javascript"></script>
+<!--    <script src="js/config.js" type="text/javascript"></script>-->
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/index.css">
+</head>
+<body>
+<div id="meetingRoom">
+    <el-container v-if="!isFullScreen&&isAllow">
+        <el-header class="meet-header">
+            <div class="meet-name">
+                <span>会议：001</span>
+            </div>
+            <div class="flex-between">
+                <div class="time_meter">
+                    <span id="tm_hour">{{tmHour}}</span>
+                    <span>:</span>
+                    <span id="tm_min">{{tmMin}}</span>
+                    <span>:</span>
+                    <span id="tm_sec">{{tmSec}}</span>
+                    <el-divider direction="vertical"></el-divider>
+                    <el-popover placement="right-start" width="104" trigger="hover">
+                        <span>总人数 （ {{videoList.length}}人）</span>
+                        <el-divider style="margin: 10px 0;"></el-divider>
+                        <ul>
+                            <li class="mb8">
+                                <p class="color_bbb fs12">会议号</p>
+                                <div class="flex-between">
+                                        <span class="room_id single_ellipsis"
+                                              :title="userInfo.roomId">{{userInfo.roomId}}</span>
+                                    <div class="copy_box">
+                                        <img src="images/copy.png" class="pointer" @click="infoCopy('roomId')" title="复制">
+                                        <span v-if="isCopyId" class="copy_alert">复制成功</span>
+                                    </div>
+                                </div>
+                            </li>
+                            <li>
+                                <p class="color_bbb fs12">会议链接</p>
+                                <div class="flex-between">
+                                    <span class="room_url single_ellipsis" :title=`https${url}`>https://{{url}}</span>
+                                    <div class="copy_box">
+                                        <img src="images/copy.png" class="pointer" @click="infoCopy('roomUrl')" title="复制">
+                                        <span v-if="isCopyUrl" class="copy_alert">复制成功</span>
+                                    </div>
+                                </div>
+                            </li>
+                        </ul>
+                        <img slot="reference" class="group_icon" src="images/group.png">
+                    </el-popover>
+                </div>
+                <el-button type="danger" size="mini" @click="leaveMeet">结束会议</el-button>
+            </div>
+        </el-header>
+        <el-container class="core_part">
+            <el-main class="video_list">
+                <!-- 最外层-->
+                <div class="container" v-if="gridLayout">
+                    <!-- 横向滚动盒子      -->
+                    <div class="scroll_box" v-if="pageVideoList.length" :style=`width:${pageVideoList.length*100}%`>
+                        <div class="page_box" v-for="(pageList,idx) in pageVideoList" :key="idx" :style="gridStyle">
+                            <div class="videoBox" v-for="(videoObj,index) in pageList" :key="videoObj.stream.id">
+                                <video class="video_size RX180" :id="videoObj.stream.id"
+                                       :muted="videoObj.name==userInfo.userName?true:false"></video>
+                                <div class="video_bottom">
+                                    <span style="padding-left:6px">{{videoObj.name}}</span>
+                                    <div style="padding-right: 6px;display: flex">
+                                        <div class="icon_box">
+                                            <div class="red_line" :class=`${videoObj.name}-audioFlag`
+                                                 style="width: 24px" v-show="!videoObj.audioFlag"></div>
+                                            <img :src="videoObj.isSpeaker?'images/user_audio_open.png':'images/audio_open_icon.png'"
+                                                 class="audio_open" />
+                                        </div>
+                                        <div class="icon_box">
+                                            <div class="red_line" :class=`${videoObj.name}-videoFlag`
+                                                 v-show="!videoObj.videoFlag"></div>
+                                            <img src="images/video_open_icon.png" />
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <el-row class="container" v-else>
+                    <el-col v-if="deskShareFlag" :span="19" class="share_main_left flex-center" :span="19">
+                        <video playsinline autoplay class="desktopVideo" style="width: 100%"></video>
+                        <div class="enlarge_icon" @click="fullScreenBtn(true)">
+                            <img src="images/enlarge.png" />
+                        </div>
+                    </el-col>
+                    <el-col v-if="paletteFlag" :span="19" class="share_main_left flex-center" :span="19">
+                        <div class="rtcBox" :style="paletteFlag&&isHostPalette?'':'pointer-events: none;cursor: default'">
+                            <ul :style="paletteFlag&&isHostPalette?'':'opacity:0'">
+                                <li v-for="v in handleList" :key="v.type">
+                                    <el-button size="mini" type="primary" plain v-if="v.type === 'color'"
+                                               style="padding:0;height: 33px">
+                                        <span class="c_title">颜色</span>
+                                        <el-color-picker v-model="color" show-alpha @change="colorChange"
+                                                         :disabled="allowHangup"></el-color-picker>
+                                    </el-button>
+                                    <el-button size="mini" type="primary" plain :disabled="v.type === 'cancel' ? allowHangup || allowCancel:
+                            v.type === 'go' ? allowHangup || allowGo
+                            :allowHangup" @click="handleClick(v)"
+                                               v-if="!['color', 'lineWidth', 'polygon','eraser'].includes(v.type)">
+                                        {{v.name}}
+                                    </el-button>
+                                    <el-popover placement="top" width="180" trigger="click"
+                                                v-if="v.type === 'polygon'">
+                                        <el-input-number v-model="sides" @change="sidesChange" :min="3" :max="10">
+                                        </el-input-number>
+                                        <el-button size="mini" type="primary" plain slot="reference"
+                                                   :disabled="allowHangup" @click="handleClick(v)"
+                                                   :class="{active: currHandle === v.type}">{{v.name}}
+                                        </el-button>
+                                    </el-popover>
+                                    <el-popover placement="top" width="180" trigger="click"
+                                                v-if="v.type === 'eraser'">
+                                        <el-input-number v-model="radius" :step="5" @change="radiusChange" :min="5"
+                                                         :max="100"></el-input-number>
+                                        <el-button size="mini" type="primary" plain slot="reference"
+                                                   :disabled="allowHangup" @click="handleClick(v)"
+                                                   :class="{active: currHandle === v.type}">{{v.name}}
+                                        </el-button>
+                                    </el-popover>
+                                    <el-popover placement="top" width="400" trigger="click"
+                                                v-if="v.type === 'lineWidth'">
+                                        <el-slider v-model="lineWidth" :max=20 @change="lineWidthChange">
+                                        </el-slider>
+                                        <el-button size="mini" type="primary" plain slot="reference"
+                                                   :disabled="allowHangup">{{v.name}} <i>{{lineWidth + 'px'}}</i>
+                                        </el-button>
+                                    </el-popover>
+                                </li>
+                            </ul>
+                            <canvas class="canvas_box" ref="canvas"></canvas>
+                        </div>
+
+                    </el-col>
+                    <el-col :span="5" class="share_main_right" v-if="videoList.length">
+                        <div class="videoBox h25p" v-for="(videoObj,index) in videoList" :key="videoObj.stream.id">
+                            <video autoplay class="video_size RX180" :id="videoObj.stream.id"
+                                   :muted="videoObj.name==userInfo.userName?true:false"></video>
+                            <div class="video_bottom">
+                                <span style="padding-left:6px">{{videoObj.name}}</span>
+                                <div style="display: flex">
+                                    <div class="icon_box">
+
+                                        <div class="red_line" style="width: 24px"
+                                             :class=`${videoObj.name}-audioFlag` v-show="!videoObj.audioFlag"></div>
+                                        <img :src="videoObj.isSpeaker?'images/user_audio_open.png':'images/audio_open_icon.png'"
+                                             class="audio_open" />
+                                    </div>
+                                    <div class="icon_box">
+                                        <div class="red_line" :class=`${videoObj.name}-videoFlag`
+                                             v-show="!videoObj.videoFlag"></div>
+                                        <img src="images/video_open_icon.png" />
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </el-col>
+                </el-row>
+                <div class="isShowAside_btn_box">
+                    <img src="images/isCollapse_btn.png" v-if="isShowAside" @click="isShowAside=false" />
+                    <img src="images/isCollapse_btn.png" v-else @click="isShowAside=true" />
+                </div>
+            </el-main>
+            <el-aside class="meet_aside" v-if="isShowAside">
+                <div class="flex-center">
+                    <el-radio-group v-model="rightTab" class="right-content" @change="rightTabClick">
+                        <el-radio-button label="userList" class="first-tab" size="mini">参会人员</el-radio-button>
+                        <el-radio-button label="chatRecord" class="second-tab" size="mini">聊天记录</el-radio-button>
+                    </el-radio-group>
+                </div>
+                <div class="user-list" v-show="rightTab=='userList'">
+                    <ul v-if="videoList.length">
+                        <li class="user_li" v-for="(videoObj,index) in videoList" :key="videoObj.stream.id">
+                            <div class="user_left">
+                                <div class="chat_pic mr6 single_ellipsis" :title="videoObj.name">
+                                    {{videoObj.name}}
+                                </div>
+                                <div>
+                                    <p class="single_ellipsis" :title="videoObj.name">{{videoObj.name}}</p>
+                                    <p class="single_ellipsis color_bbb">信息运营xxxxx部</p>
+                                </div>
+                            </div>
+                            <div class="user_right">
+                                <img :src="videoObj.audioFlag?'images/user_audio_open.png':'images/user_audio_close.png'"
+                                     class="user_icon_audio"
+                                     :class=`${videoObj.name}-audioFlag` />
+                                <img :src="videoObj.videoFlag?'images/user_video_open.png':'images/user_video_close.png'"
+                                     class="user_icon_video"
+                                     :class=`${videoObj.name}-videoFlag` />
+                            </div>
+
+                        </li>
+                    </ul>
+                </div>
+                <div class="chat_record" v-show="rightTab=='chatRecord'">
+                    <div class="chat_record_top">
+                        <div v-for="(msg,index) in messageList" :key="index">
+                            <div class="remote_li" v-if="msg.name!=userInfo.userName">
+                                <div class="chat_pic mr6 single_ellipsis" :title="msg.name">
+                                    {{msg.name}}
+                                </div>
+                                <div class="chat_con">
+                                    <div class="chat_name single_ellipsis" :title="msg.name">
+                                        {{msg.name}}
+                                    </div>
+                                    <span class="chat_content">
+                                            {{msg.content}}
+                                        </span>
+                                </div>
+                            </div>
+                            <div class="local_li" v-else>
+                                <div class="chat_pic chat_pic_local">
+                                    {{msg.name}}
+                                </div>
+                                <div class="chat_con">
+                                    <div class="chat_name">
+                                    </div>
+                                    <span class="chat_content_local mr6">
+                                            {{msg.content}}
+                                        </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat_record_bottom">
+                        <el-input placeholder="请输入..." autofocus ref="textBox"  v-model="sendContent" type="textarea" :autosize="{minRows:5}"></el-input>
+                        <el-button class="send_btn" type="primary" plain @click="sendMessage" size="mini">发送
+                        </el-button>
+                    </div>
+                </div>
+            </el-aside>
+        </el-container>
+        <el-footer class="all_footer">
+            <el-row>
+                <el-col :span="14">
+                    <span style="opacity: 0">1</span>
+                    <span style="padding-right: 80px">共享人：{{shareName||canvasShareName}}</span>
+                    <span>发言人：{{speakerList.join(',')}}</span>
+                </el-col>
+                <el-col :span="6" class="tools_icon">
+                    <el-row>
+                        <el-col :span="11" style="display: flex;">
+                            <div class="speaker_box" @click="speakerClick"
+                                 :class="[speakerFlag?'tools_open':'tools_close']">
+                            </div>
+                            <div class="audio_box" @click="audioClick"
+                                 :class="[userInfo.audioFlag?'tools_open':'tools_close']">
+
+                            </div>
+                            <div class="video_box" @click="videoClick"
+                                 :class="[userInfo.videoFlag?'tools_close':'tools_open']">
+
+                            </div>
+                        </el-col>
+                        <el-col :span="13" style="display: flex">
+                            <div class="palette_icon" @click="paletteClick"
+                                 :style=`opacity:${paletteFlag&&!isHostPalette?0.5:1}`>
+                                <img src="images/palette.jpeg">
+                                <div>{{paletteCon}}</div>
+                            </div>
+                            <div class="share_box" :class="[deskShareFlag?'tools_open':'tools_close']"
+                                 @click="shareClick">
+
+                            </div>
+                            <div class="record_box" :class="[recordFlag?'tools_close record_p':'tools_open']"
+                                 @click="recordClick">
+
+                            </div>
+                        </el-col>
+                    </el-row>
+                </el-col>
+                <el-col :span="4" style="position: relative">
+                    <el-select v-model="screenNum"  :disabled="!gridLayout" placeholder="屏幕视图布局" size="mini" clearable @change="screenChange"
+                               class="screen_box">
+                        <el-option v-for="item in screenOptions" :key="item.value" :label="item.label"
+                                   :value="item.value">
+                        </el-option>
+                    </el-select>
+                    <img src="images/grid_icon.png" class="grid_icon">
+                </el-col>
+            </el-row>
+        </el-footer>
+    </el-container>
+    <div class="full_screen flex-center" :span="19" v-else>
+        <video autoplay class="fullVideo" style="width: 100%"></video>
+        <div class="ensmall_icon" @click="fullScreenBtn(false)">
+            <img src="images/ensmall.png" />
+        </div>
+    </div>
+</div>
+</body>
+<script>
+    new Vue({
+        el: '#meetingRoom',
+        data() {
+           return {
+               isAllow:false,
+               originIsLogin:false,
+               userInfo:{},
+               speakerFlag:false,
+               audioFlag:false,
+               videoFlag:false,
+               paletteFlag:false,
+               deskShareFlag:false,
+               recordFlag:false,
+               //区域一：顶部
+               isCopyId:false,
+               isCopyUrl:false,
+               messageList:[],
+               //宫格区域
+               pageVideoList:[],
+               gridStyle: 'grid-template-columns: repeat(2,1fr);grid-template-rows: repeat(2,1fr);width:100%',
+               videoList:[],
+               participants:[],
+               // 区域二：侧边
+               isShowAside:true,//点击展开按钮的时候false
+               rightTab:"chatRecord",//默认展示聊天记录
+               sendContent:'',
+               // 区域三：底部
+               shareName:'',
+               deskShareInfo:null,
+               shareStream:null,
+               speakerList:[],
+               screenNum:'',//2，3，4
+               screenOptions: [
+                   {
+                       value: '2',
+                       label: '四宫格布局',
+                   },
+                   {
+                       value: '3',
+                       label: '九宫格布局',
+                   },
+                   {
+                       value: '4',
+                       label: '十六宫格布局',
+                   },
+
+               ],
+               isFullScreen:false,
+               tmHour:'00',
+               tmMin:'00',
+               tmSec:'00',
+
+           //    连接相关
+               url:"172.16.15.112:8001",
+               userInfo:{},
+               ws:null,
+               pc:null,
+               tm:null,
+               client:null,
+               localStream:null,
+               audioTrack:null,
+               videoTrack:null,
+               audioSender:null,
+               videoSender:null,
+           //    白板
+               paletteFlag: false,
+               paletteCon: '发起白板',
+               palette: null, // 画板
+               canvasShareName:'',
+               isHostPalette:false,
+               handleList: [
+                   { name: '圆', type: 'arc' },
+                   { name: '线条', type: 'line' },
+                   { name: '矩形', type: 'rect' },
+                   { name: '多边形', type: 'polygon' },
+                   { name: '橡皮擦', type: 'eraser' },
+                   { name: '撤回', type: 'cancel' },
+                   { name: '前进', type: 'go' },
+                   { name: '清屏', type: 'clear' },
+                   { name: '线宽', type: 'lineWidth' },
+                   { name: '颜色', type: 'color' }
+               ],
+               color: 'rgba(19, 206, 102, 1)',
+               currHandle: 'line',
+               lineWidth: 1,
+               sides: 2,
+               radius: 40,//橡皮擦半径
+               allowCall: true,
+               allowHangup: false,
+               allowCancel: true,
+               allowGo: true,
+               canvasWidth: 0,
+               canvasHeight: 0,
+           }
+        },
+        computed: {
+            gridLayout(){
+                let isGrid = !this.deskShareFlag && !this.paletteFlag
+                return isGrid
+            },
+        },
+
+        methods: {
+            rightTabClick(val){
+                if(val=='chatRecord'){
+                    this.$refs.textBox.focus()
+                }
+            },
+            //区域一：顶部
+            infoCopy(type) {
+                let copyNode;
+                let flagType;
+                if (type == "roomId") {
+                    copyNode = document.querySelector('.room_id')
+                    flagType = "isCopyId"
+                } else {
+                    copyNode = document.querySelector('.room_url')
+                    flagType = "isCopyUrl"
+                }
+                tools.copyHandle(copyNode)
+                setTimeout(() => {
+                    this[flagType] = true
+                }, 100)
+                setTimeout(() => {
+                    this[flagType] = false
+                }, 1500)
+
+            },
+            // 区域二：侧边
+            async sendMessage() {
+                if (!this.sendContent.trim()) return
+                let data = {
+                    type: 'text',
+                    name: this.userInfo.userName,
+                    content: this.sendContent,
+                    // time:new Date().toLocaleTimeString()
+                }
+                await this.tm.event("messageEvent", data);
+                this.sendContent = ''
+            },
+            // 区域三：底部
+            speakerClick() {
+
+            },
+            /**
+             * 打开/关闭麦克风
+             */
+            audioClick() {
+                //下面按钮
+                let {audioFlag:flag,userName} = this.userInfo
+                flag = !flag
+                this.$set(this.userInfo,'audioFlag',flag)
+                this.audioTrack.enabled = flag
+                if (flag) {
+                    this.detectSound(this.localStream)
+                }
+                // 自己的视频窗口展示小图标
+                // 通知别人改变
+                this.tm.event("statusChange",{userName,audioFlag:flag})
+            },
+            detectSound(stream) {
+                let audioCtx = new AudioContext()
+                let mediaStreamSource = audioCtx.createMediaStreamSource(stream)
+                // 创建一个音频分析对象，采样的缓冲区大小为4096，输入和输出都是单声道
+                let scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1)
+                // 将该分析对象与麦克风音频进行连接
+                mediaStreamSource.connect(scriptProcessor)
+                scriptProcessor.connect(audioCtx.destination)
+                scriptProcessor.onaudioprocess = (e) => {
+                    // 获得缓冲区的输入音频，转换为包含了PCM通道数据的32位浮点数组
+                    if (!this.audioFlag) {
+                        scriptProcessor.onaudioprocess = null
+                    }
+                    let buffer = e.inputBuffer.getChannelData(0)
+                    // 获取缓冲区中最大的音量值
+                    let maxVal = Math.max.apply(Math, buffer)
+                    let name = this.userInfo.userName
+                    if (maxVal > 0.2) {
+                        let self = this.videoList.find(item => item.name == name)
+                        if (!self.isSpeaker) {
+                            this.tm.event("speakerChanged", { name, isSpeaker: true })
+                        }
+                    } else {
+                        let self = this.videoList.find(item => item.name == name)
+                        if (self && self.isSpeaker) {
+                            this.tm.event("speakerChanged", { name, isSpeaker: false })
+                        }
+                    }
+                }
+            },
+            /**
+             * 打开/关闭摄像头
+             */
+            videoClick() {
+                let {videoFlag:flag,userName} = this.userInfo
+                flag = !flag
+                this.$set(this.userInfo,'videoFlag',flag)
+                this.videoTrack.enabled = flag
+                this.tm.event("statusChange",{userName,videoFlag:flag})
+            },
+            async paletteClick() {
+                if (this.deskShareFlag) {
+                    this.$message({
+                        message: "共享桌面中，请稍候发起",
+                        type: 'warning'
+                    });
+                    return
+                }
+                this.paletteFlag = !this.paletteFlag
+                this.isHostPalette = !this.isHostPalette
+                let name = this.userInfo.userName
+
+                if (this.paletteFlag) {
+                    this.paletteCon = '结束白板'
+                    await this.tm.event("canvasShare", { flag: true, name })
+
+                } else {
+                    this.paletteCon = '发起白板'
+                    await this.tm.event("canvasShare", { flag: false, name })
+
+                }
+            },
+            async shareClick() {
+                if (this.deskShareFlag) {
+                    this.$message({
+                        message: '正在共享屏幕中,请稍候发起',
+                        type: 'warning'
+                    });
+                    return
+                }
+                if (this.paletteFlag) {
+                    this.$message({
+                        message: "画板共享中，请稍候发起",
+                        type: 'warning'
+                    });
+                    return
+                }
+
+                let shareStream;
+                try{
+                    shareStream = await navigator.mediaDevices.getDisplayMedia({video: true})
+                }catch (error) {
+                    if (error.message == 'Permission denied') {
+                        this.$message({
+                            message: '取消了屏幕共享',
+                            type: 'warning'
+                        });
+                    }
+                }
+                if(!shareStream) return
+                let {roomId, userName} = this.userInfo
+                let wsUrl = `wss://${this.url}?roomId=${roomId}&userName=${userName}@$@share`;
+                let shareWs = new WebSocket(wsUrl);
+                let shareTm = new TransactionManager(shareWs);
+
+                let client = new MediaServerClient(shareTm);
+                shareWs.onopen=async()=>{
+                   let sharePc = await client.createManagedPeerConnection();
+                    let shareVideoTrack = shareStream.getVideoTracks()[0];
+                    let shareVideoSender = await sharePc.addTrack(shareVideoTrack,shareStream,{})
+                    this.tm.event("join", {roomId,userName:userName+'@$@share'})
+                    shareVideoTrack.onended = async () => {
+                        sharePc.removeTrack(shareVideoSender)
+                        shareWs.close()
+                        shareWs = null
+                        shareTm = null
+                        sharePc = null
+                    }
+                }
+
+            },
+            screenChange(val) {
+                if (!this.gridLayout) return
+                if (val) {
+                    this.screenNum = val
+                    this.gridStyle = `grid-template-columns: repeat(${val},1fr);grid-template-rows: repeat(${val},1fr);width:100%`
+                    this.pageVideoList = this.videoListHandle()
+                    this.$nextTick(()=>{
+                        this.videoList.forEach(item=>{
+                            this.playStream(item.stream)
+                        })
+                    })
+                }
+            },
+            recordClick() {
+
+            },
+            fullScreenBtn(type) {
+                let videoDom;
+                if (type == true) {//全屏
+                    this.isFullScreen = true
+                    this.$nextTick(()=>{
+                        const video = document.querySelector('.fullVideo')
+                        this.playShareStream(video,this.shareStream);
+                    })
+                } else {
+                    this.isFullScreen = false
+
+                    this.$nextTick(()=>{
+                        const video = document.querySelector('.desktopVideo');
+                        this.playShareStream(video,this.shareStream);
+                        this.videoList.forEach(item=>{
+                            this.playStream(item.stream)
+                        })
+                    })
+                }
+            },
+            //    连接相关
+            //解析参数
+            getUserInfo() {
+                let params = {}
+                if (location.search.length > 1) {
+                    let queryStr = location.search.slice(1)
+                    if (queryStr) {
+                        queryStr.split('&').forEach(item => {
+                            let itemArr = item.split('=')
+                            params[itemArr[0]] = itemArr[1]
+                        })
+                        let {audioFlag, videoFlag} = params
+                        params.audioFlag = audioFlag && audioFlag.includes("false") ? false : true
+                        params.videoFlag = videoFlag && videoFlag.includes("false") ? false : true
+                    }
+                }
+                return params
+            },
+
+            connect() {
+                //Connect with websocket
+
+                let {roomId, userName, audioFlag, videoFlag} = this.userInfo
+
+                let wsUrl = `wss://${this.url}?roomId=${roomId}&userName=${userName}&audioFlag=${audioFlag}&videoFlag=${videoFlag}`;
+                this.ws = new WebSocket(wsUrl);
+
+                //Crete transaction manager
+                this.tm = new TransactionManager(this.ws);
+                this.tm.on("event", (event) => {
+                    switch (event.name) {
+                        case "participants":
+                            this.participants = event.data //先得到participants改变，后监听到ontrack
+                            let shareInfo = this.participants.find(item=>item.name.endsWith("@$@share"))
+                            if(shareInfo){
+                                this.shareName = shareInfo.name.split('@')[0]
+                                this.deskShareInfo =shareInfo
+                                this.deskShareFlag = true
+                            }
+                            break;
+                        case "statusChange":
+                            this.changeStatus(event.data)
+                            break;
+                        case "messageEvent":
+                            this.messageList.push(event.data)
+                            if (this.deskShareFlag&&this.deskShareInfo.name == this.userInfo.userName) {
+                                try {
+                                    Notification.requestPermission().then((result => {
+                                        if (Notification.permission == "granted") {
+                                            let notification = new Notification(`${event.data.name}:`, {
+                                                icon: '',
+                                                body: event.data.content,
+                                            })
+                                            notification.onclick = function () {
+                                                this.close()
+                                            }
+                                        }
+                                    }))
+                                } catch (error) {
+                                    this.$message({
+                                        message: error.message,
+                                        type: 'error'
+                                    });
+
+                                }
+
+                            }
+                            break;
+                        case "joinMeetTimeEvent":
+                            this.getMeetTimer(event.data.joinMeetTime)
+                            break;
+                        case "canvasShare":
+                            if (event.data && event.data.flag) {
+                                if(this.canvasShareName) return
+                                this.canvasShareName = event.data.name
+                                setTimeout(() => {
+                                    this.startCanvasShare()
+                                }, 0)
+
+                            } else {
+                                this.endCanvasShare()
+                            }
+                            break;
+                        case "paletteConfig":
+                            this.palette.changeWay(event.data);
+                            break;
+                        case "mouseEvent":
+                            if (this.isHostPalette) return
+                            if (event.data.eventName == 'mousedown') {
+                                this.palette.paintParamsChange(event.data.XY)
+                                this.palette.bindMousedown()
+                            } else if (event.data.eventName == 'mousemove') {
+                                this.palette.paintParamsChange(event.data.dXY)
+                                this.palette.bindMousemove()
+                            } else if (event.data.eventName == 'mouseup') {
+                                this.palette.bindMouseup()
+                            } else if (event.data.eventName == 'cancel') {
+                                this.palette.cancel()
+                            } else if (event.data.eventName == 'go') {
+                                this.palette.go()
+                            } else if (event.data.eventName == 'clear') {
+                                this.palette.clear()
+                            }
+                            break;
+                        case "speakerChanged":
+                            this.speakerList = []
+                            this.videoList = this.videoList.map(item => {
+                                if (item.name == event.data.name) {
+                                    item.isSpeaker = event.data.isSpeaker
+                                }
+                                if (item.isSpeaker) {
+                                    this.speakerList.push(item.name)
+                                }
+                                return item
+                            })
+                            break;
+                    }
+                })
+
+                //Create managed peer connection
+                this.client = new MediaServerClient(this.tm);
+
+                //Start on open
+                this.ws.onopen = async () => {
+                    //Create new managed pc
+
+                    this.pc = await this.client.createManagedPeerConnection();
+                    //On new remote tracks
+                    this.pc.ontrack = this.addRemoteTrack;
+                    this.pc.ontrackended = this.removeRemoteTrack;
+                    try{
+                        let constraints = {
+                            audio: true,
+                            video: {
+                                width: { min: 320, max: 320 },
+                                height: { min: 240, max: 240 },
+                                frameRate: 15,//帧率控制传输速率
+                            }
+                        }
+                        let stream = await navigator.mediaDevices.getUserMedia(constraints)
+                        this.localStream = stream;
+                        if (this.audioFlag) {
+                            this.detectSound(stream)
+                        }
+
+                        let videoObj = {
+                            ...this.userInfo,
+                            name:this.userInfo.userName,
+                            stream,
+                        }
+                        this.videoList.push(videoObj)
+                        //判断是否宫格布局，是的话，获取宫格数据
+                        if(this.gridLayout){
+                            this.pageVideoList=this.videoListHandle()
+                        }
+                        this.$nextTick(()=>{
+                            this.playStream(stream);
+                        })
+                        await this.sendTrack();
+                        this.tm.event("join", this.userInfo)
+                    }catch(error){
+                        this.$message({
+                            message: error.message,
+                            type: 'warning'
+                        });
+                    }
+
+                }
+
+            },
+            async sendTrack(simulcast,codecs){
+                this.videoTrack = this.localStream.getVideoTracks()[0];
+                this.audioTrack = this.localStream.getAudioTracks()[0];
+                let {audioFlag,videoFlag} = this.userInfo
+                this.videoTrack.enabled = videoFlag
+                this.audioTrack.enabled = audioFlag
+                let params = {};
+
+                //If using simulcast
+                if (simulcast)
+                    //Add simulcast params
+                    params.encodings = [
+                        { rid: "a"},
+                        { rid: "b" , scaleDownResolutionBy: 2.0 },
+                        { rid: "c" , scaleDownResolutionBy: 4.0 }
+                    ];
+
+                //If overriding codecs
+                if (codecs)
+                    //Set them to params
+                    params.codecs = [codecs];
+
+                //Add to pc
+
+                [this.audioSender,this.videoSender] = await Promise.all([this.pc.addTrack(this.audioTrack,this.localStream),this.pc.addTrack(this.videoTrack,this.localStream,params)]);
+            },
+
+            addRemoteTrack(event) {
+                //监听到别人的流
+                const track = event.track;
+                const stream = event.streams[0];
+                //Check if video is already present
+                let video = document.getElementById(stream.id)
+                if (video) return //Check if already present
+                if (!stream) return //addRemoteTrack() no stream
+
+                if(this.deskShareInfo&&this.deskShareInfo.streamId==stream.id){ //说明是共享流
+                    this.shareStream = stream //别人得到共享流
+                    const video = document.querySelector('.desktopVideo');
+                    this.$nextTick(()=>{
+                        this.playShareStream(video,stream);
+                        this.videoList.forEach(item=>{
+                            this.playStream(item.stream)
+                        })
+                    })
+
+                }else{
+
+                    let participant = this.participants.find(item=>item.streamId==stream.id)
+                    if(!participant) return
+                    let videoObj = {
+                        ...participant,
+                        stream,
+                    }
+                    this.videoList.push(videoObj)
+                    //判断是否宫格布局，是的话，获取宫格数据
+                    if(this.gridLayout){
+                        this.pageVideoList=this.videoListHandle()
+                    }
+                    this.$nextTick(()=>{
+                        this.playStream(stream);
+                    })
+                }
+
+
+            },
+            removeRemoteTrack(event){
+                //监听到别人离开
+                const track	= event.track;
+                const stream	= event.streams[0];
+                //判断是共享流还是视频流
+                if(this.deskShareFlag&&stream.id==this.shareStream.id){
+                    this.deskShareFlag=false
+                    this.deskShareInfo=null
+                    this.shareStream=null
+                    this.$nextTick(()=>{
+                        this.videoList.forEach(item=>{
+                            this.playStream(item.stream)
+                        })
+                    })
+                }else{
+                    //Check if already present
+                    let presentIndex = this.videoList.findIndex(item=>item.stream.id==stream.id)
+                    if(presentIndex==-1) return //removeRemoteTrack() video not present
+                    this.videoList.splice(presentIndex,1)
+                }
+                if(this.gridLayout){
+                    this.pageVideoList = this.videoListHandle()
+                }
+            },
+            playStream(stream) {
+                const video = document.getElementById(stream.id);
+                if(!video) return
+                video.id = stream.id;
+                video.srcObject = stream;
+                video.autoplay = true;
+                video.play();
+            },
+            changeStatus(data){
+                let {userName,audioFlag,videoFlag} = data
+                if(audioFlag!=undefined){ //有人麦克风改变
+                    let redDom = document.querySelector(`.video_list .${userName}-audioFlag`)
+                    redDom.style.display = audioFlag?'none':'block'
+                    if(!audioFlag){
+                        let d = redDom.nextElementSibling
+                        d.setAttribute('src', 'images/audio_open_icon.png')
+                    }
+                    let iconDom = document.querySelector(`.meet_aside .${userName}-audioFlag`)
+                    let src = audioFlag?'images/user_audio_open.png':'images/user_audio_close.png'
+                    iconDom.setAttribute('src',src)
+                }else{
+                    let redDom = document.querySelector(`.video_list .${userName}-videoFlag`)
+                    redDom.style.display = videoFlag?'none':'block'
+                    let iconDom = document.querySelector(`.meet_aside .${userName}-videoFlag`)
+                    let src = videoFlag?'images/user_video_open.png':'images/user_video_close.png'
+                    iconDom.setAttribute('src',src)
+                }
+            },
+            playShareStream(video,stream){
+                if(!video) return
+                video.id = stream.id;
+                video.srcObject = stream;
+                video.autoplay = true;
+                video.play();
+            },
+            videoListHandle() {
+
+                let arr = this.videoList
+                let num = this.screenNum?this.screenNum:2
+                let size = num * num
+                let index = 0
+                let newArr = []
+                while (index < arr.length) {
+                    newArr.push(arr.slice(index, index += size))
+                }
+                return newArr
+            },
+            startCanvasShare() {
+                this.paletteFlag = true
+                this.allowHangup = false;
+                this.$nextTick(() => {
+                    this.getCanvasSize()
+                    this.initPalette()
+                    this.videoList.forEach(item=>{
+                        this.playStream(item.stream)
+                    })
+                })
+            },
+            endCanvasShare() {
+                this.canvasShareName = ''
+                this.allowCall = false;
+                this.allowHangup = true;
+                this.palette.destroy();
+                this.paletteFlag = false
+                this.pageVideoList = this.videoListHandle()
+                this.$nextTick(() => {
+                    this.videoList.forEach(item=>{
+                        this.playStream(item.stream)
+                    })
+                })
+            },
+            getCanvasSize() {
+                let toolDom = document.querySelector('.rtcBox ul')
+                let paletteDom = document.querySelector('.share_main_left')
+                this.canvasWidth = parseFloat(getComputedStyle(paletteDom).width) - parseFloat(getComputedStyle(toolDom).width) - 30
+                this.canvasHeight = parseFloat(getComputedStyle(paletteDom).height)
+            },
+            //    初始化画板
+            initPalette() {
+                let canvasDom = this.$refs['canvas']
+                canvasDom.width = this.canvasWidth
+                canvasDom.height = this.canvasHeight
+                this.palette = new Palette(this.isHostPalette, canvasDom, this.tm, {
+                    drawColor: this.color,
+                    drawType: this.currHandle,
+                    lineWidth: this.lineWidth,
+                    radius: this.radius,
+                    allowCallback: this.allowCallback
+                });
+            },
+            allowCallback(cancel, go) {
+                this.allowCancel = !cancel;
+                this.allowGo = !go;
+            },
+            async sidesChange() {
+                this.palette.changeWay({ sides: this.sides });
+                await this.tm.event("paletteConfig", { sides: this.sides });
+            },
+            async radiusChange() {
+                this.palette.changeWay({ radius: this.radius });
+                await this.tm.event("paletteConfig", { radius: this.radius });
+            },
+            async colorChange() {
+                this.palette.changeWay({ color: this.color });
+                await this.tm.event("paletteConfig", { color: this.color });
+            },
+            async lineWidthChange() {
+                this.palette.changeWay({ lineWidth: this.lineWidth });
+                await this.tm.event("paletteConfig", { lineWidth: this.lineWidth });
+            },
+            async handleClick(v) {
+                if (['cancel', 'go', 'clear'].includes(v.type)) {
+                    this.palette[v.type]();
+                    return;
+                }
+                this.palette.changeWay({ type: v.type });
+                await this.tm.event("paletteConfig", { type: v.type });
+                if (['color', 'lineWidth'].includes(v.type)) return;
+                this.currHandle = v.type;
+            },
+            start() {
+                this.state = '2';
+                this.newRecognition.start();
+            },
+            stop() {
+                this.state = '1';
+                this.newRecognition.stop();
+            },
+            getMeetTimer(time){
+                this.tmSec =tools.doubleNumber(time % 60)
+                this.tmMin =tools.doubleNumber(parseInt((time / 60) % 60))
+                this.tmHour=tools.doubleNumber(parseInt((time / 3600) % 60))
+            },
+           leaveMeet(){
+                //移除音视频轨
+               try{
+                   this.pc.removeTrack(this.audioSender);
+                   this.pc.removeTrack(this.videoSender);
+               }catch(error){
+                   console.log(error)
+               }
+                this.ws.close()
+                this.closePage()
+            },
+            closePage(){
+                if(this.originIsLogin){
+                    sessionStorage.removeItem('meet@_info')
+                    history.back()
+                }else{
+                    let isLinux = (String(navigator.platform).indexOf("Linux") > -1);
+                    if (isLinux){
+                        window.location.href="about:blank";
+                    }
+                    window.close();
+                }
+            },
+            getSession(){
+                let meetInfo = sessionStorage.getItem('meet@_info')
+                if(meetInfo){
+                    meetInfo = JSON.parse(meetInfo)
+                    this.originIsLogin = meetInfo.originIsLogin
+                }
+            },
+            getIsAllowBrowser(){
+                let userAgent = navigator.userAgent; //取得浏览器的userAgent字符串
+                let isAllow = userAgent.indexOf("Chrome") > -1||userAgent.indexOf("Firefox") > -1;
+                if(!isAllow){
+                    alert('请在 谷歌/火狐/qq 浏览器 中打开')
+                    this.closePage()
+                }else{
+                    this.isAllow=true
+                }
+            }
+
+        },
+
+        created() {
+            //加一个浏览器判断
+            this.getIsAllowBrowser()
+            this.userInfo = this.getUserInfo()
+            let {roomId,userName} = this.userInfo
+            if(roomId==undefined||userName==undefined){
+                window.location.href='/login.html'
+            }
+            this.getSession()
+            this.connect()
+        },
+        mounted() {
+            document.onkeyup = (e) => {
+                if (e.key == 'Enter' && this.rightTab == 'chatRecord' && this.sendContent) {
+                    this.sendMessage()
+                }
+            }
+        },
+        // async beforeDestroy() {
+        //     if(this.paletteFlag&&this.isHostPalette){
+        //         await this.tm.event("canvasShare", { flag: false, name:this.userInfo.userName })
+        //     }
+        // }
+    })
+</script>
+</html>

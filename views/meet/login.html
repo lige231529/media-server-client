@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <style>
+        .login_panel{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 160px auto;
+        }
+        .login_panel div{
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="login_panel">
+    <div>房间号：<input id = "roomId" value="001"/></div>
+    <div>访客名：<input id = "userName" value="li"/></div>
+    <div>麦克风：<input id = "audioFlag" value="false"/></div>
+    <div>摄像头：<input id = "videoFlag" value="true"/>&nbsp;</div>
+    <button id="sure">确定</button><br/>
+</div>
+</body>
+<script>
+    //Start everything
+    window.onload=()=>{
+        let sureBtn = document.getElementById('sure')
+
+        sureBtn.onclick = ()=> {
+            let roomId = document.getElementById("roomId").value;
+            let userName = document.getElementById("userName").value;
+            let audioFlag = document.getElementById("audioFlag").value;
+            let videoFlag = document.getElementById("videoFlag").value;
+            window.location.href=`index.html?roomId=${roomId}&userName=${userName}&audioFlag=${audioFlag}&videoFlag=${videoFlag}`
+            let meetInfo = {
+                originIsLogin:true,//从登录页面跳转到会议室
+            }
+            sessionStorage.setItem('meet@_info',JSON.stringify(meetInfo))
+        }
+    };
+</script>
+</html>
+
